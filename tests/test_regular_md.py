@@ -57,7 +57,7 @@ class RegularMDTests(unittest.TestCase):
                 for unified in (False, True):
                     self.assertIn(f'dependencies={{ "{name}" }}'.encode(), render(MD, unified=unified)["descriptor.mod"])
 
-    def test_oem_is_not_detected_even_if_it_reuses_regular_workshop_id(self):
+    def test_oem_has_a_distinct_profile_even_if_it_reuses_regular_workshop_id(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             source = root / "source"
@@ -66,8 +66,7 @@ class RegularMDTests(unittest.TestCase):
             self.descriptor(root, entry, source, "Millennium Dawn OEM Local")
             self.assertFalse(is_regular_md(root / entry))
             configure_bases(root, [entry, ENTRY])
-            with self.assertRaises(RuntimeError):
-                select_unified([entry, ENTRY])
+            self.assertEqual(select_unified([entry, ENTRY]), "millennium_dawn_oem")
             (root / "voices-profiles.json").write_text(json.dumps({entry: MD}))
             with self.assertRaises(RuntimeError):
                 configure_bases(root, [entry, ENTRY])
@@ -98,8 +97,7 @@ class RegularMDTests(unittest.TestCase):
             self.assertIn("profile=millennium_dawn|", export)
             self.assertNotIn("millennium_dawn_oem", export)
             self.assertEqual(len(re.findall(r"has_government = \w+ \}\s+set_temp_variable = \{ aid_ideo = \d+", export)), 5)
-        with self.assertRaises(ValueError):
-            functions.configure_profile("millennium_dawn_oem")
+        functions.configure_profile("millennium_dawn_oem")
 
     def source_fixture(self, root):
         for folder in ("common/ideologies", "common/units/equipment", "common/ai_templates", "localisation/english"):

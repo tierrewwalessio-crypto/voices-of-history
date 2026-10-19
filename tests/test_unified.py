@@ -180,9 +180,10 @@ class UnifiedNativeTests(unittest.TestCase):
         from profiles import TFR_GROUPS, CWIC_GROUPS
         expected["the_fire_rises"] = {k for k, _ in TFR_GROUPS}
         expected["cwic_dev"] = {k for k, _ in CWIC_GROUPS}
+        expected["millennium_dawn_oem"] = expected["millennium_dawn"]
         for profile in CONFIGS:
             files = render(profile)
-            dependency = {"millennium_dawn": "Millennium Dawn: A Modern Day Mod", "cwic_dev": "Cold War Iron Curtain Dev Build", "the_fire_rises": "The Fire Rises"}.get(profile)
+            dependency = {"millennium_dawn_oem": "Millennium Dawn OEM Local", "millennium_dawn": "Millennium Dawn: A Modern Day Mod", "cwic_dev": "Cold War Iron Curtain Dev Build", "the_fire_rises": "The Fire Rises"}.get(profile)
             if dependency:
                 self.assertIn(f'dependencies={{ "{dependency}" }}'.encode(), files["descriptor.mod"])
             else:

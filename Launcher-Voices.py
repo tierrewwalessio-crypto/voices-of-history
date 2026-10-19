@@ -97,7 +97,7 @@ def main(forwarded):
         if process_ids("pythonw.exe", ROOT / "middleware/main.py"):
             raise RuntimeError("A Voices middleware is already running. Close its window before starting this launcher session.")
         if config_name in CONFIGS.values():
-            install_or_compile(USERDIR, cfg["game_profile"])
+            install_or_compile(USERDIR, cfg["game_profile"], telemetry=cfg.get("telemetry", {}).get("enabled", False))
         python = ROOT / ".venv/Scripts/pythonw.exe"
         if not python.is_file():
             python = Path(sys.executable)

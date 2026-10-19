@@ -14,6 +14,8 @@ from strategist import Strategist
 from usage_budget import BudgetClient, BudgetExceeded
 from profiles import request_instructions
 from leader_voice import leader_voice_rules
+import telemetry
+from proposals import Proposals, aircraft_order
 
 
 def compact_context(state, world, actor=None):
@@ -33,6 +35,7 @@ class UnifiedRuntime:
     def _reset_log_session(self):
         """A new game log invalidates cached campaign data; persistent history stays saved."""
         self.latest_state, self.world, self.states = {}, {}, {}
+        self._telemetry = None
         self.diplomatic_contacts.clear()
         self.gid, self.day, self._last_day = 0, 0, 0
         self._last_gid, self._last_tag, self._ptag = None, None, ""
@@ -56,10 +59,20 @@ class UnifiedRuntime:
         self.strategist = None
         if self.cfg.get("unified"):
             self.journal = ActionJournal(self.cfg["actions"]["journal"])
+            self.proposals = Proposals(self.journal) if self.cfg.get('proposals', {}).get('enabled') else None
             with self.journal.connect() as db:
                 db.execute("UPDATE actions SET state='uncertain' WHERE state='pending'")
             cfg = self.cfg["strategist"]
             self.strategist = Strategist(self.cfg["game_profile"], cfg["settings_file"], cfg["ledger"])
+
+    def _on_telemetry(self, packet):
+        if not self.cfg.get("telemetry", {}).get("enabled") or not telemetry.matches(packet, self.latest_state):
+            return
+        old = getattr(self, "_telemetry", None)
+        if old and telemetry.matches(old, self.latest_state) and telemetry.number(old['day'], True) > telemetry.number(packet['day'], True):
+            return
+        self._telemetry = packet
+        self.latest_state["telemetry"] = packet
 
     def _unified_system(self, channel, state, world, sample=None):
         actor = channel.split(":", 1)[1] if channel.startswith(("leader:", "strategy:")) else state.get("tag")
@@ -85,15 +98,31 @@ class UnifiedRuntime:
             role = f"Write a brief {voice} newspaper report based on the exported campaign and recorded facts. Missing events stay unknown. No game actions. "
         elif channel in ("life", "actor"):
             role = "Narrate the requested domestic roleplay scene, keeping campaign facts and hypothetical events distinct. No game actions. "
+        catalog = CATALOG
+        if self.cfg.get('proposals', {}).get('enabled'):
+            role += ("Equipment transfers use persistent proposals: emit propose_equipment with sender, receiver, "
+                     "equipment_type and quantity (null when unknown), decision=negotiate. Do not invent quantities. "
+                     "A quantity-only reply fills the pending proposal; a separate exact-id confirmation authorizes it. "
+                     "Aircraft production/procurement is unsupported: no verified variant queue/delivery receipts. "
+                     "Never claim contact with manufacturers, queued production, applied changes or delivered equipment "
+                     "without the corresponding recorded engine evidence. ")
+            catalog = catalog.replace('Refusal/negotiation/information has\nactions=[].',
+                                      'Refusal/information has actions=[]. Negotiation may contain only propose_equipment drafts.')
+            catalog = catalog.replace('Actions need decision=accept', 'Executing actions need decision=accept')
+            catalog += ('\n- propose_equipment {sender,receiver,equipment_type,quantity}: a nonexecuting transfer draft; '
+                        'quantity is null when the player has not supplied it. Use decision=negotiate. '
+                        'The human supplies quantity and confirms the exact proposal id in later turns.\n')
         return (role + "Use exported facts before opening lore. Do not predetermine future branches. "
                 "Missing stockpiles, treaties, fronts and custom mechanics are unknown. " +
                 style + self._lang_directive(sample) + "\n" +
-                prompts.difficulty_block() + "\n" + CATALOG + "\nVerified equipment: " +
+                prompts.difficulty_block() + "\n" + catalog + "\nVerified equipment: " +
                 ", ".join(sorted(equipment_set(self.cfg["game_profile"]))))
 
     def _unified_context(self, channel, state, world):
         actor = channel.split(":", 1)[1] if channel.startswith(("leader:", "strategy:")) else None
         context = compact_context(state, world, actor)
+        if self.cfg.get("telemetry", {}).get("enabled"):
+            context += "\n" + telemetry.context(state)
         if channel.startswith("leader:"):
             context += "\n" + gs.diplomatic_context(state, world, {"target": actor, "player": state.get("tag")})
         if self.lore:
@@ -107,6 +136,24 @@ class UnifiedRuntime:
         if (not state.get("live") or not int(state.get("gid", 0))
                 or state.get("profile", "vanilla") != self.cfg["game_profile"]):
             raise ValueError("Synchronize the selected unified profile before sending a request.")
+        proposals = getattr(self, 'proposals', None)
+        if proposals:
+            if aircraft_order(text) and (channel == 'decree' or channel.startswith('leader:')):
+                local = (proposals.unsupported(text, state, world, channel, self.cfg['game_profile']), None, None)
+            else:
+                local = proposals.reply(text, state, world, channel, self.cfg['game_profile'])
+            if local:
+                message, normalized, proposal_id = local
+                if normalized:
+                    if not self.auto_exec:
+                        message += ' Automatic action execution is disabled; no effect submitted.'
+                    else:
+                        tx = self._submit_unified(normalized, state, world)
+                        proposals.bind(proposal_id, tx)
+                        message += ' See the transaction status below; confirmation is not execution.'
+                self.memory.add_turn(channel, text, message, int(state['gid']), int(state['day']))
+                self.q.put(('assistant', {'name': channel_name or 'Office', 'message': message}))
+                return
         if channel.startswith("leader:"):
             actor = channel.split(":", 1)[1]
             contact = gs.diplomatic_contact({"target": actor, "player": state["tag"]}, state, world)
@@ -121,6 +168,9 @@ class UnifiedRuntime:
         context += ("\nOlder narrative records can describe proposals or previews. They are not proof of a completed action. "
                     "Only matching engine results establish execution. Recent unified action states:\n" +
                     json.dumps(self.journal.recent(self.cfg["game_profile"], int(state["gid"]), limit=5, day=int(state["day"]))))
+        if proposals:
+            proposals.pending(state, world, channel, self.cfg['game_profile'])
+            context += '\nPERSISTENT PROPOSALS:\n' + json.dumps(proposals.recent(self.cfg['game_profile'], state, channel))
         system = {"role": "system", "content": self._unified_system(channel, state, world, text)}
         user = {"role": "user", "content": context + "\nCURRENT PLAYER MESSAGE:\n" + text}
         max_chars = self.llm.budget.settings["max_input_chars"] - len(request_instructions(self.cfg))
@@ -133,6 +183,9 @@ class UnifiedRuntime:
         raw = self.llm.interactive_chat(messages)
         parsed = self._parse_unified_reply(raw, channel)
         message = parsed.get("message") if isinstance(parsed.get("message"), str) else LLMClient.loose_text(raw)
+        if re.search(r'\b(queued|delivered|applied|executed|ordered|contacted|placed (?:the|an?|your) order)\b', message, re.I):
+            # Execution claims come from the journal/engine receipt path, never prose.
+            message = 'Execution is not established by this reply. Check the recorded transaction status; unsupported requests have no game effect.'
         # Persist the actual exchange before action processing; never make an extraction request.
         if (str(self.latest_state.get("gid")) != str(state.get("gid"))
                 or self.latest_state.get("tag") != state.get("tag")
@@ -171,21 +224,32 @@ class UnifiedRuntime:
             if not isinstance(action, dict):
                 continue
             try:
+                proposals = getattr(self, 'proposals', None)
+                if proposals and action.get('name') in ('send_equipment', 'propose_equipment') and not automatic:
+                    if parsed.get('decision') not in ('accept', 'negotiate'):
+                        raise ValueError('This reply does not propose an equipment transfer.')
+                    proposal_id, candidate = proposals.create(action, text, state, world, channel, self.cfg['game_profile'])
+                    self.q.put(('action', proposals.describe(proposal_id, candidate)))
+                    continue
                 normalized = validate(action, state, world, channel, parsed.get("decision"), text,
                                       self.cfg["game_profile"], automatic)
                 signature = json.dumps(normalized, sort_keys=True)
                 if signature in seen:
                     continue
                 seen.add(signature)
-                preview = self.injector.dry_run or not self.cfg.get("actions", {}).get("live_approved", False)
-                tx = self.journal.create(normalized, state, self.cfg["game_profile"], preview)
-                compiled = command(normalized, tx, state["gid"])
-                self._log(f"[unified-action] {tx} {'preview' if preview else 'pending'} {signature}")
-                self.q.put(("action", ("Preview: " if preview else "Awaiting game confirmation: ") + describe(normalized)))
-                if not preview:
-                    self._deliver_unified(tx, compiled, state, world, normalized["actor"])
+                self._submit_unified(normalized, state, world)
             except ValueError as error:
                 self.q.put(("action", "Action not applied: " + str(error)))
+
+    def _submit_unified(self, normalized, state, world):
+        preview = self.injector.dry_run or not self.cfg.get('actions', {}).get('live_approved', False)
+        tx = self.journal.create(normalized, state, self.cfg['game_profile'], preview)
+        compiled = command(normalized, tx, state['gid'])
+        self._log(f"[unified-action] {tx} {'preview' if preview else 'pending'} {json.dumps(normalized, sort_keys=True)}")
+        self.q.put(('action', ('Preview only: ' if preview else 'Awaiting game confirmation: ') + describe(normalized)))
+        if not preview:
+            self._deliver_unified(tx, compiled, state, world, normalized['actor'])
+        return tx
 
     def _deliver_unified(self, tx, compiled, state, world, actor):
         """Single delivery attempt. Unknown delivery is never retried automatically."""
@@ -202,7 +266,7 @@ class UnifiedRuntime:
             # The user can return to the game without another model request. Never steal focus.
             deadline = time.monotonic() + 30
             if not self.injector.can_inject_now():
-                self.q.put(("action", "Approved action queued: hide the Voices panel or return to HOI4 within 30 seconds to deliver it."))
+                self.q.put(("action", "Awaiting delivery: hide the Voices panel or return to HOI4 within 30 seconds. No engine receipt yet."))
             while not self.injector.can_inject_now() and self.running and time.monotonic() < deadline:
                 time.sleep(0.25)
             current = self.latest_state

@@ -8,7 +8,7 @@ import re
 
 from tfr_lore import TFRLore, LOC, TOKENS, character_blocks, clean
 
-LABELS = {"millennium_dawn": "MILLENNIUM DAWN", "cwic_dev": "CWIC", "vanilla": "VANILLA"}
+LABELS = {"millennium_dawn": "MILLENNIUM DAWN", "millennium_dawn_oem": "MILLENNIUM DAWN OEM", "cwic_dev": "CWIC", "vanilla": "VANILLA"}
 
 
 def creation_blocks(text):
@@ -117,6 +117,9 @@ def make_lore(cfg):
     if profile == "millennium_dawn" and source and (Path(source) / "descriptor.mod").is_file():
         from md_compat import require_regular_md
         require_regular_md(Path(source) / "descriptor.mod")
+    if profile == "millennium_dawn_oem" and source:
+        from md_compat import require_oem
+        require_oem(Path(source) / "descriptor.mod")
     if profile == "the_fire_rises":
         return TFRLore(source or cfg.get("tfr", {}).get("source", ""))
     return ProfileLore(source, profile) if profile in LABELS and source else None

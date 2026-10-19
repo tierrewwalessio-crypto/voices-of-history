@@ -24,3 +24,18 @@ def is_regular_md(path):
 def require_regular_md(path):
     if not is_regular_md(path):
         raise RuntimeError("Expected regular Millennium Dawn descriptor metadata (Workshop " + WORKSHOP_ID + "): " + str(path))
+
+
+def is_oem(path):
+    try:
+        text = Path(path).read_text(encoding="utf-8-sig")
+        # Local OEM descriptors deliberately have no Workshop id. Never infer OEM
+        # from regular MD's shared Workshop id, folder name, or equipment names.
+        return quoted_field(text, "name") in {"Millennium Dawn OEM Local", "Millennium Dawn: OEM Edition"}
+    except (OSError, UnicodeError, ValueError):
+        return False
+
+
+def require_oem(path):
+    if not is_oem(path):
+        raise RuntimeError("Expected explicit Millennium Dawn OEM metadata: " + str(path))

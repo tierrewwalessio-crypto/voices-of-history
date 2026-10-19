@@ -1,9 +1,10 @@
 """Definitions verified against the installed local overhaul sources."""
 
 MD = "millennium_dawn"
+MD_OEM = "millennium_dawn_oem"
 CWIC_DEV = "cwic_dev"
 TFR = "the_fire_rises"
-RESTRICTED_PROFILES = (MD, CWIC_DEV, TFR)
+RESTRICTED_PROFILES = (MD, MD_OEM, CWIC_DEV, TFR)
 
 TFR_REACTION_STYLE = """TFR REACTION STYLE: dramatic, in character and consistent with the
 active campaign. Treat this mod's political extremity and alternate-history premises as
@@ -90,7 +91,7 @@ MD_IDEOLOGY = {
     "1": "Salafist Outlook", "2": "Emerging Outlook", "3": "Western Outlook",
     "4": "Non-Aligned Outlook", "5": "Nationalist Outlook", "0": "Unknown",
 }
-IDEOLOGY_LABELS = {MD: MD_IDEOLOGY, CWIC_DEV: CWIC_IDEOLOGY, TFR: TFR_IDEOLOGY}
+IDEOLOGY_LABELS = {MD: MD_IDEOLOGY, MD_OEM: MD_IDEOLOGY, CWIC_DEV: CWIC_IDEOLOGY, TFR: TFR_IDEOLOGY}
 
 MD_EQUIPMENT = {
     "infantry_weapons_type", "artillery_equipment", "AA_Equipment",
@@ -248,6 +249,10 @@ Targets are actual live country tags or ROOT. All numbers must be numeric.
 def model_instructions(cfg):
     instructions = {MD: MD_INSTRUCTIONS, CWIC_DEV: CWIC_INSTRUCTIONS,
                     TFR: TFR_INSTRUCTIONS}.get(cfg.get("game_profile"), "")
+    if cfg.get("game_profile") == MD_OEM:
+        instructions = MD_INSTRUCTIONS.replace("ACTIVE GAME: Millennium Dawn", "ACTIVE GAME: Millennium Dawn OEM")
+    if cfg.get("telemetry", {}).get("enabled"):
+        instructions += "\nVerified timestamped telemetry may report economy/readiness; this grants no economy actions. Missing metrics stay unknown."
     if cfg.get("injection", {}).get("dry_run"):
         instructions += ("\nEXECUTION MODE: DRY RUN. Every emitted action is a preview. "
                          "No game command will be executed. Describe proposed effects in "

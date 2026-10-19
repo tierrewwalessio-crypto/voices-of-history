@@ -19,6 +19,7 @@ import threading
 import time
 
 import game_state as gs
+import telemetry
 import functions
 from llm_client import LLMClient
 from providers import configured_client
@@ -382,6 +383,11 @@ class App(UnifiedRuntime):
         return (now - last) < window
 
     def _handle_log_line(self, line):
+        if "AIDIPLO_TELEMETRY|" in line:
+            packet = telemetry.parse(line)
+            if packet:
+                self.q.put(("telemetry", packet))
+            return
         if self._caught_up and getattr(self, "journal", None):
             result = self.journal.receive(line)
             if result:
@@ -493,6 +499,8 @@ class App(UnifiedRuntime):
                     self._on_state(payload)
                 elif kind == "log_reset":
                     self._reset_log_session()
+                elif kind == "telemetry":
+                    self._on_telemetry(payload)
                 elif kind == "open":
                     self._on_open(payload)
                 elif kind == "decree":
@@ -732,6 +740,8 @@ class App(UnifiedRuntime):
     def _on_state(self, st):
         previous = self.latest_state
         self.latest_state = st
+        if telemetry.matches(getattr(self, "_telemetry", None), st):
+            st["telemetry"] = self._telemetry
         # mostra SEMPRE lo stato corrente nella barra
         self.ui.set_status(
             f"{st.get('name','?')} ({st.get('tag','?')}) | {st.get('date','?')} | "

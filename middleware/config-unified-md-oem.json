@@ -1,0 +1,74 @@
+{
+  "_README": "Opt-in OEM example, separate from regular MD. Telemetry needs native compilation and a game restart. Dry run stays enabled. See docs/TELEMETRY.md.",
+  "provider": "player2",
+  "chatgpt_plan": {
+    "model": "",
+    "timeout_sec": 120
+  },
+  "player2": {
+    "base_url": "http://localhost:4315",
+    "chat_path": "/v1/chat/completions",
+    "health_path": "/v1/health",
+    "game_key": "hoi4-ai-diplomacy",
+    "model": "",
+    "timeout_sec": 120,
+    "temperature": 0.8
+  },
+  "paths": {
+    "game_log": "${USERPROFILE}/Documents/Paradox Interactive/Hearts of Iron IV/logs/game.log",
+    "mod_localisation": "${USERPROFILE}/Documents/Paradox Interactive/Hearts of Iron IV/mod/HOI4_AI_Voices_Universal/localisation/english/ai_diplo_l_english.yml",
+    "memory_db": "user-data/ai_diplo_md_oem.sqlite3"
+  },
+  "injection": {
+    "console_key": "grave",
+    "input_method": "paste",
+    "window_title": "Hearts of Iron IV",
+    "key_delay": 0.02,
+    "pre_command_delay": 0.3,
+    "post_command_delay": 0.15,
+    "focus_game": true,
+    "reload_loc_after_event": true,
+    "dry_run": true
+  },
+  "behavior": {
+    "language": "it",
+    "max_history": 12,
+    "auto_execute_actions": true,
+    "max_facts": 10,
+    "action_extraction": false,
+    "compact_context": true,
+    "enhanced_personalities": true,
+    "realism_mode_file": "user-data/mode-millennium_dawn_oem.txt"
+  },
+  "game_profile": "millennium_dawn_oem",
+  "unified": true,
+  "events": {
+    "enabled": false
+  },
+  "usage": {
+    "ledger": "user-data/voices-usage.sqlite3",
+    "calls_per_day": 30,
+    "tokens_per_day": 100000,
+    "automatic_calls_per_day": 6,
+    "automatic_tokens_per_day": 20000,
+    "automatic_calls_per_ten_minutes": 3,
+    "max_output_tokens": 1200,
+    "automatic_max_output_tokens": 800,
+    "max_input_chars": 30000,
+    "enabled": true
+  },
+  "strategist": {
+    "settings_file": "user-data/pilot-millennium_dawn_oem.json",
+    "ledger": "user-data/voices-strategy.sqlite3"
+  },
+  "actions": {
+    "journal": "user-data/voices-actions.sqlite3",
+    "live_approved": false
+  },
+  "telemetry": {
+    "enabled": true
+  },
+  "proposals": {
+    "enabled": true
+  }
+}

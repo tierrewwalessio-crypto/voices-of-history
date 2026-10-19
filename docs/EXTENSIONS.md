@@ -19,6 +19,11 @@ The MD profile targets [regular upstream Millennium Dawn](MILLENNIUM_DAWN_COMPAT
 Workshop item `2777392649`; it does not select the OEM distribution. Use
 `config-unified-md.json` or `config-md.json`, with profile `millennium_dawn`.
 
+The separate OEM profile is `millennium_dawn_oem`, using
+`config-unified-md-oem.json`. Its opt-in readiness/economy exports and durable
+equipment proposals are described in [TELEMETRY.md](TELEMETRY.md), including
+the remaining native validation and aircraft procurement limitations.
+
 All added configuration examples use Player2, dry run and explicit expanded
 personality settings. Copy an example to an ignored `config.local.json` before
 customizing it. They contain no account credentials or installation-specific paths.
@@ -36,7 +41,7 @@ Install a separate unified adapter while the game is closed:
 .\.venv\Scripts\python.exe unified_mod.py --userdir "C:/Users/YOU/Documents/Paradox Interactive/Hearts of Iron IV" --profile vanilla --initial
 ```
 
-Select `vanilla`, `millennium_dawn`, `cwic_dev` or `the_fire_rises`.
+Select `vanilla`, `millennium_dawn`, `millennium_dawn_oem`, `cwic_dev` or `the_fire_rises`.
 `--legacy` installs the corresponding broader overhaul adapter instead of the
 unified adapter; vanilla uses the original entry for its full catalog.
 The installer refuses an existing destination on initial installation. Subsequent

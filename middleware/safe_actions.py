@@ -27,7 +27,7 @@ Use only these typed actions, with numeric values and exact synchronized country
 - ai_priority {target,priority:hold|infantry|mobile}: AI country's own production role emphasis for 14 days.
 - add_political_power {target,amount}: player's explicit Office order only, -5 to +5.
 Actions need decision=accept and a concrete authorized request. Never act for third countries.
-Your acceptance of a proposal is distinct from execution. Describe actions as proposed/queued;
+Your acceptance of a proposal is distinct from execution. Describe actions as proposed;
 only a separate engine confirmation can establish success. Refusal/negotiation/information has
 actions=[]. 'Take no actions', hypothetical and text-only requests always have actions=[].
 No arbitrary commands, effects, wars, annexations, free factories, unearned resource grants,
@@ -36,11 +36,11 @@ elections, leader changes or custom-overhaul systems. Unsupported requests stay 
 
 
 def equipment_set(profile):
-    return {MD: MD_EQUIPMENT, CWIC_DEV: CWIC_EQUIPMENT, TFR: TFR_EQUIPMENT}.get(
+    return {MD: MD_EQUIPMENT, "millennium_dawn_oem": MD_EQUIPMENT, CWIC_DEV: CWIC_EQUIPMENT, TFR: TFR_EQUIPMENT}.get(
         profile, TFR_EQUIPMENT)
 
 
-def response_schema(profile):
+def response_schema(profile, proposals=False):
     """Responses structured output; authorization still belongs to validate()."""
     def obj(properties):
         return {"type": "object", "properties": properties,
@@ -56,14 +56,21 @@ def response_schema(profile):
         "sender": tag, "receiver": tag,
         "equipment_type": {"type": "string", "enum": sorted(equipment_set(profile))},
         "quantity": {"type": "integer", "minimum": 1, "maximum": 500}})
+    proposal = variant(["propose_equipment"], {
+        "sender": tag, "receiver": tag,
+        "equipment_type": {"type": "string", "enum": sorted(equipment_set(profile))},
+        "quantity": {"type": ["integer", "null"], "minimum": 1, "maximum": 500}})
     priority = variant(["ai_priority"], {"target": tag,
         "priority": {"type": "string", "enum": ["hold", "infantry", "mobile"]}})
     political_power = variant(["add_political_power"], {"target": tag,
         "amount": {"type": "integer", "minimum": -5, "maximum": 5}})
+    variants = [diplomacy, equipment, priority, political_power]
+    if proposals:
+        variants.append(proposal)
     return obj({"message": {"type": "string"},
                 "decision": {"type": "string", "enum": ["inform", "negotiate", "refuse", "accept"]},
                 "actions": {"type": "array", "maxItems": 2,
-                            "items": {"anyOf": [diplomacy, equipment, priority, political_power]}}})
+                            "items": {"anyOf": variants}}})
 
 
 def _tag(value, player):

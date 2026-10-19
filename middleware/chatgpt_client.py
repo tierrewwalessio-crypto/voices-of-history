@@ -18,7 +18,8 @@ class ChatGPTPlanClient:
         self.base_url = RESOURCE
         self.profile_instructions = model_instructions(cfg)
         self.cfg = cfg
-        self.response_schema = response_schema(cfg.get("game_profile", "vanilla")) if cfg.get("unified") else None
+        self.response_schema = response_schema(cfg.get("game_profile", "vanilla"),
+                                               proposals=cfg.get('proposals', {}).get('enabled', False)) if cfg.get("unified") else None
 
     def heartbeat(self):
         try:

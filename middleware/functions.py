@@ -16,7 +16,7 @@ Ogni azione ritorna:
   { "commands": [str...], "desc": str, "memory": str|None, "special": dict|None }
 """
 import re
-from profiles import (MD_ACTIONS, MD_CATALOG, MD_EQUIPMENT, MD_EQUIPMENT_ALIASES, MD,
+from profiles import (MD_ACTIONS, MD_CATALOG, MD_EQUIPMENT, MD_EQUIPMENT_ALIASES, MD, MD_OEM,
                       CWIC_DEV, CWIC_CATALOG, CWIC_EQUIPMENT, CWIC_EQUIPMENT_ALIASES,
                       TFR, TFR_CATALOG, TFR_EQUIPMENT, TFR_EQUIPMENT_ALIASES,
                       RESTRICTED_PROFILES)
@@ -97,6 +97,7 @@ def _resolve_equip(s):
         raw = str(s or "").strip()
         valid, aliases = {
             MD: (MD_EQUIPMENT, MD_EQUIPMENT_ALIASES),
+            MD_OEM: (MD_EQUIPMENT, MD_EQUIPMENT_ALIASES),
             CWIC_DEV: (CWIC_EQUIPMENT, CWIC_EQUIPMENT_ALIASES),
             TFR: (TFR_EQUIPMENT, TFR_EQUIPMENT_ALIASES),
         }[GAME_PROFILE]
@@ -434,7 +435,7 @@ def build_action(name, args):
     name = (name or "").strip()
     a = args or {}
     if GAME_PROFILE in RESTRICTED_PROFILES and name not in MD_ACTIONS:
-        label = {MD: "Millennium Dawn", CWIC_DEV: "CWIC", TFR: "The Fire Rises"}[GAME_PROFILE]
+        label = {MD: "Millennium Dawn", MD_OEM: "Millennium Dawn OEM", CWIC_DEV: "CWIC", TFR: "The Fire Rises"}[GAME_PROFILE]
         return _r([], f"The {label} integration does not support '{name}' yet; "
                       "no game change was made.")
 
@@ -1047,7 +1048,7 @@ def catalog_text():
         return TFR_CATALOG
     if GAME_PROFILE == CWIC_DEV:
         return CWIC_CATALOG
-    if GAME_PROFILE == MD:
+    if GAME_PROFILE in (MD, MD_OEM):
         return MD_CATALOG
     return """\
 ACTION CATALOG ("actions" field). Use ONLY these names. The "target" values are 3-letter

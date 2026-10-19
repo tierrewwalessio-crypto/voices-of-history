@@ -52,7 +52,7 @@ that a historical event or private meeting happened in this alternate campaign.
 If this is an unknown or fictional representative without supplied characterization,
 use restrained context-based dialogue; do not borrow a famous predecessor's biography.
 """
-    if profile == "millennium_dawn":
+    if profile in ("millennium_dawn", "millennium_dawn_oem"):
         return historical + """MILLENNIUM DAWN CHARACTER VOICE:
 Use modern political conversation at the actual exported date. An outlook is a broad
 game grouping, not a personality or proof that its members share an ideology or agenda.

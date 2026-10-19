@@ -17,10 +17,12 @@ BASES = {"mod/MD_LOCAL_STANDARD.mod": "millennium_dawn",
          "mod/Cold_War_Iron_Curtain.mod": "cwic_dev",
          "mod/ugc_3350890356.mod": "the_fire_rises"}
 CONFIGS = {"vanilla": "config-unified-vanilla.json",
+           "millennium_dawn_oem": "config-unified-md-oem.json",
            "millennium_dawn": "config-unified-md.json",
            "cwic_dev": "config-unified-cwic-dev.json",
            "the_fire_rises": "config-unified-tfr.json"}
 DEPENDENCIES = {"millennium_dawn": "Millennium Dawn: A Modern Day Mod",
+                "millennium_dawn_oem": "Millennium Dawn OEM Local",
                 "cwic_dev": "Cold War Iron Curtain Dev Build", "the_fire_rises": "The Fire Rises"}
 
 
@@ -65,6 +67,10 @@ def characterization_source(enabled, userdir, game_dir):
         from middleware.md_compat import require_regular_md
         require_regular_md(descriptor)
         require_regular_md(source / "descriptor.mod")
+    if profile == "millennium_dawn_oem":
+        from middleware.md_compat import require_oem
+        require_oem(descriptor)
+        require_oem(source / "descriptor.mod")
     if not (source / "history/countries").is_dir():
         raise RuntimeError("The selected game's country source is missing: " + str(source))
     return source
@@ -130,11 +136,12 @@ def descriptor_matches(actual, expected):
         return False
 
 
-def render(profile, unified=True):
+def render(profile, unified=True, telemetry=False):
     import sys
     sys.path.insert(0, str(ROOT / "middleware"))
     from profiles import CWIC_GROUPS, TFR_GROUPS
     groups = {"vanilla": ("fascism", "communism", "democratic", "neutrality"),
+              "millennium_dawn_oem": ("fascism", "communism", "democratic", "neutrality", "nationalist"),
               "millennium_dawn": ("fascism", "communism", "democratic", "neutrality", "nationalist"),
               "cwic_dev": tuple(k for k, _ in CWIC_GROUPS),
               "the_fire_rises": tuple(k for k, _ in TFR_GROUPS)}[profile]
@@ -152,6 +159,9 @@ def render(profile, unified=True):
                       for p in overlay.rglob("*") if p.is_file()})
         if profile == "millennium_dawn":
             files["descriptor.mod"] += f'dependencies={{ "{DEPENDENCIES[profile]}" }}\n'.encode()
+        if telemetry:
+            from middleware.telemetry import attach
+            attach(files, profile)
         return files
     template = ROOT / "native/shared"
     if not template.is_dir():
@@ -208,7 +218,7 @@ voices_mobile_priority = {
  ai_strategy = { type = role_ratio id = motorized value = 5 }
 }
 '''
-    if profile == "millennium_dawn":
+    if profile in ("millennium_dawn", "millennium_dawn_oem"):
         # MD's verified mobile template role is ifv_mechanized, not motorized.
         priority_file = "common/ai_strategy/voices_priorities.txt"
         files[priority_file] = files[priority_file].replace(b"id = motorized", b"id = ifv_mechanized")
@@ -216,10 +226,13 @@ voices_mobile_priority = {
         # TFR's motorized strategy exists upstream, but its actual mobile templates use mechanized.
         priority_file = "common/ai_strategy/voices_priorities.txt"
         files[priority_file] = files[priority_file].replace(b"id = motorized", b"id = mechanized")
+    if telemetry:
+        from middleware.telemetry import attach
+        attach(files, profile)
     return files
 
 
-def install_or_compile(userdir, profile, initial=False, legacy=False):
+def install_or_compile(userdir, profile, initial=False, legacy=False, telemetry=False):
     """Only replace our unchanged generated files. Never modify a playset or base mod."""
     userdir = Path(userdir).resolve()
     mods = userdir / "mod"
@@ -253,7 +266,7 @@ def install_or_compile(userdir, profile, initial=False, legacy=False):
             raise RuntimeError("The unified descriptor ownership metadata is inconsistent.")
         if not descriptor_matches(descriptor.read_bytes(), expected_descriptor):
             raise RuntimeError("The unified descriptor was edited externally.")
-    files = render(profile, unified=not legacy)
+    files = render(profile, unified=not legacy, telemetry=telemetry)
     # Back up the whole small owned installation before changing its generated profile.
     if target.exists():
         backup = ROOT / "launcher-backup/unified" / str(__import__("time").time_ns())
@@ -279,6 +292,10 @@ def install_or_compile(userdir, profile, initial=False, legacy=False):
                 destination = target / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(stage / relative, destination)
+            # Optional telemetry can be disabled again. Remove only old owned
+            # files whose hashes were verified above, never arbitrary contents.
+            for relative in set(old) - set(files):
+                (target / relative).unlink()
             os.replace(stage / manifest_path.name, manifest_path)
         # Preserve equivalent launcher formatting to avoid unnecessary registration churn.
         if not descriptor.exists() or not descriptor_matches(descriptor.read_bytes(), external):
@@ -302,7 +319,7 @@ def install_or_compile(userdir, profile, initial=False, legacy=False):
 
 def configure_bases(userdir, enabled=None):
     """Resolve explicit aliases and regular MD metadata from the selected descriptors."""
-    from middleware.md_compat import is_regular_md, require_regular_md, quoted_field
+    from middleware.md_compat import is_regular_md, require_regular_md, is_oem, require_oem, quoted_field
     userdir = Path(userdir)
     mapping_path = userdir / "voices-profiles.json"
     mapping = json.loads(mapping_path.read_text(encoding="utf-8")) if mapping_path.exists() else {}
@@ -317,7 +334,13 @@ def configure_bases(userdir, enabled=None):
             continue
         descriptor = userdir / candidate
         if descriptor.is_file() and is_regular_md(descriptor):
+            if entry in mapping and mapping[entry] != "millennium_dawn":
+                raise RuntimeError("The explicit profile conflicts with the selected descriptor.")
             mapping[entry] = "millennium_dawn"
+        elif descriptor.is_file() and is_oem(descriptor):
+            if entry in mapping and mapping[entry] != "millennium_dawn_oem":
+                raise RuntimeError("OEM must use its separate profile, never regular MD.")
+            mapping[entry] = "millennium_dawn_oem"
     selected_names = {}
     for entry, profile in mapping.items():
         candidate = Path(entry)
@@ -329,6 +352,8 @@ def configure_bases(userdir, enabled=None):
         name = quoted_field(text, "name")
         if profile == "millennium_dawn":
             require_regular_md(descriptor)
+        if profile == "millennium_dawn_oem":
+            require_oem(descriptor)
         BASES[entry] = profile
         if entry in enabled or not enabled:
             selected_names.setdefault(profile, set()).add(name)
@@ -344,7 +369,8 @@ if __name__ == "__main__":
     parser.add_argument("--profile", required=True, choices=tuple(CONFIGS))
     parser.add_argument("--initial", action="store_true", help="Create only; refuses an existing destination")
     parser.add_argument("--legacy", action="store_true", help="Install the broader legacy catalog for an overhaul")
+    parser.add_argument("--telemetry", action="store_true", help="Opt in to verified player readiness/economy exports")
     args = parser.parse_args()
     configure_bases(args.userdir)
-    manifest = install_or_compile(args.userdir, args.profile, args.initial, args.legacy)
+    manifest = install_or_compile(args.userdir, args.profile, args.initial, args.legacy, args.telemetry)
     print("Installed profile:", manifest["profile"], "files:", len(manifest["files"]))
