@@ -10,6 +10,7 @@ import sys
 import time
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from unified_mod import select_unified, CONFIGS, install_or_compile, characterization_source, configure_bases, BASES
+from radio_mods import gameplay_mods
 
 ROOT = Path(__file__).resolve().parent
 USERDIR = Path(os.environ.get("VOICES_USERDIR", Path.home() / "Documents/Paradox Interactive/Hearts of Iron IV"))
@@ -64,6 +65,8 @@ def process_ids(name, command_contains=None):
 def main(forwarded):
     DATA.mkdir(exist_ok=True)
     selection = json.loads((USERDIR / "dlc_load.json").read_text(encoding="utf-8"))
+    original_mods = selection.get("enabled_mods", [])
+    selection["enabled_mods"] = gameplay_mods(USERDIR, original_mods)
     configure_bases(USERDIR, selection.get("enabled_mods", []))
     config_name = select_profile(selection.get("enabled_mods", []))
     config_path = ROOT / "middleware" / config_name
@@ -78,6 +81,7 @@ def main(forwarded):
     source = characterization_source(selection.get("enabled_mods", []), USERDIR, game_dir)
     if forwarded == ["--check"]:
         print(json.dumps({"selected_config": config_name, "profile": cfg.get("game_profile", "vanilla"),
+                          "ignored_radio_mods": [entry for entry in original_mods if entry not in selection["enabled_mods"]],
                           "characterization_source": str(source) if source else None,
                           "dry_run": cfg["injection"]["dry_run"], "game_launch_requested": False}))
         return 0

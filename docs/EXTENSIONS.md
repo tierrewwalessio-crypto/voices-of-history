@@ -73,6 +73,35 @@ to inspect selection without starting either process. `VoicesLauncher.cs` is an
 optional source adapter for Paradox's executable entry; build it locally with the
 Windows C# compiler and keep the resulting binary private. No executable is shipped.
 
+The bridge permits unpacked radio-only extras alongside the matching adapter and
+overhaul. It checks both descriptors and the actual files, rather than trusting a
+mod name or Sound/Music tag alone. The supported layout is music plus MMCT station
+faceplates, radio-cover sprites and song localisation. Mods with gameplay files,
+replace paths, dependencies, archives or unrelated UI/localisation remain subject
+to the existing strict profile selection. Duplicate entries, mixed overhauls,
+older Voices adapters and an adapter loaded before its overhaul still fail.
+The radio entries stay enabled in the actual playset; `--check` lists them as
+`ignored_radio_mods` only for profile detection. Other sound-mod layouts are not
+automatically exempted.
+
+### An in-game button does nothing
+
+The Office and diplomacy buttons emit log messages; the external middleware opens
+the chat panel. Enabling the native mod and using ordinary Paradox **Play** does
+not start that helper. Use the named Voices launcher option for the next full
+session. A current `AIDIPLO_DECREE_OPEN`/`AIDIPLO_OPEN` log entry with no middleware
+process or current helper log indicates a disconnected helper rather than a
+missing button or a GUI-placement failure.
+
+An already-running campaign does not need to restart just to recover dry-run
+chat. If no helper is running, start the source middleware separately with the
+matching configuration, as above, keeping its dry-run/live-approval settings.
+Wait for campaign synchronization, then click Office/Talk again. Startup reads
+existing state but intentionally does not replay old button clicks or actions.
+Do not start another game or a second helper. Executable game commands still
+require a suitable non-Ironman/debug session; attaching the helper does not add
+debug mode to an already-running game.
+
 Regular MD is recognized by verified Workshop metadata (`ugc_2777392649.mod`) or
 `MD_LOCAL_STANDARD.mod`, including renamed selected descriptors with matching regular
 metadata. Other existing aliases recognize `Cold_War_Iron_Curtain.mod` and TFR's `ugc_3350890356.mod`. For another local filename,
